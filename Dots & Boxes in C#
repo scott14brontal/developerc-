@@ -1,0 +1,1132 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace AI
+{
+    public partial class Form1 : Form
+    {
+        public Form1()
+        {
+            InitializeComponent();
+            g = this.CreateGraphics();
+            m_oWorker = new BackgroundWorker();
+            m_oWorker.DoWork += new DoWorkEventHandler(Ai2_Against_Ai1);
+            m_oWorker.WorkerReportsProgress = true;
+            m_oWorker.WorkerSupportsCancellation = true;
+            delayTime = gameSpeed.Value;
+        }
+        Graphics g;
+
+        class Pointt
+        {
+            public float x, y;
+
+            // 0 = right   1 = bottom   2 = left   3 = top
+            public int[] dir = new int[4];
+
+            public Pointt(float x, float y)
+            {
+                this.x = x;
+                this.y = y;
+                dir[0] = dir[1] = dir[2] = dir[3] = 0;
+            }
+        }
+
+        class Line
+        {
+            public PointF p1, p2;
+            public Line(PointF p1, PointF p2)
+            {
+                this.p1 = p1;
+                this.p2 = p2;
+            }
+        }
+        class Square
+        {
+            public PointF p1, p2, p3, p4;
+            public Square()
+            {
+            }
+            public void CreateSquare(PointF p1, PointF p2, PointF p3, PointF p4)
+            {
+                this.p1 = p1;
+                this.p2 = p2;
+                this.p3 = p3;
+                this.p4 = p4;
+            }
+        }
+
+        int n = 4;
+        int m = 4;
+
+       
+        int offset = 25;
+
+       
+        int sizeofdot = 10;
+
+         // 0 = player   1 = Ai1
+        // 0 = player   1 = Random
+        // 0 = Ai2      1 = Ai1
+        int turn = 0;
+
+        // -1 = not started     1 = AI2 And AI1     2 = Player And AI1       3 = Player And Random
+        int gameMode = -1;
+
+        Pointt[,] array;
+
+      
+       
+        float distanceBetweenDotX;
+
+            
+        float distanceBetweenDotY;
+
+        
+        // ( i * distanceBetweenDotX ) + offset
+        // ( j * distanceBetweenDotY ) + offset
+   
+        int maxLine;
+
+      
+        List<PointF> points = new List<PointF>();
+
+      
+        List<Line> lines;
+
+        
+        int[] scores = new int[2];
+
+       
+        int delayTime; // 200
+
+       
+        Brush pointColor = Brushes.Black;
+
+        
+        Pen lineRedColor = Pens.Red;
+        Brush squareRedColor = Brushes.Red;
+
+        
+        Pen lineBlueColor = Pens.Blue;
+        Brush squareBlueColor = Brushes.Blue;
+
+        
+        bool IsTruePoint(PointF p)
+        {
+            if (p.X == -1 || p.Y == -1)
+                return false;
+
+            foreach (var q in points)
+                if (q.X == p.X && q.Y == p.Y)
+                    return true;
+
+            return false;
+        }
+
+        
+        bool IsDrawedLine(PointF p1, PointF p2)
+        {
+            foreach (var l in lines)
+            {
+                if (l.p1 == p1)
+                {
+                    if (l.p2 == p2)
+                        return true;
+                }
+                else if (l.p1 == p2)
+                {
+                    if (l.p2 == p1)
+                        return true;
+                }
+                else if (l.p2 == p1)
+                {
+                    if (l.p1 == p2)
+                        return true;
+                }
+                else if (l.p2 == p2)
+                {
+                    if (l.p1 == p1)
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        // چک کردن صحیح بودن خط
+        bool IsTrueLine(PointF p1, PointF p2)
+        {
+            if (!IsTruePoint(p1) || !IsTruePoint(p2))
+                return false;
+
+            double d = Math.Sqrt(Math.Pow(p1.X - p2.X, 2) + Math.Pow(p1.Y - p2.Y, 2));
+            if (p1.X == p2.X && d == distanceBetweenDotY)
+            {
+                if (IsDrawedLine(p1, p2))
+                    return false;
+
+                return true;
+            }
+            else if (p1.Y == p2.Y && d == distanceBetweenDotX)
+            {
+                if (IsDrawedLine(p1, p2))
+                    return false;
+
+                return true;
+            }
+            return false;
+        }
+
+        // Logging
+        void Log(string text)
+        {
+            if (textBox1.InvokeRequired)
+            {
+                textBox1.Invoke(new MethodInvoker(delegate
+                {
+                    textBox1.Text = (text + Environment.NewLine) + textBox1.Text;
+                }));
+            }
+            else
+            {
+                textBox1.Text = (text + Environment.NewLine) + textBox1.Text;
+            }
+        }
+
+      
+        bool MakeLine(PointF point1, PointF point2)
+        {
+
+            if (!IsTrueLine(point1, point2))
+                return false;
+
+            int i1 = Convert.ToInt32((point1.X - offset) / distanceBetweenDotX);
+            int j1 = Convert.ToInt32((point1.Y - offset) / distanceBetweenDotY);
+
+            int i2 = Convert.ToInt32((point2.X - offset) / distanceBetweenDotX);
+            int j2 = Convert.ToInt32((point2.Y - offset) / distanceBetweenDotY);
+
+            
+            int[] check = CheckState(point1, point2);
+
+            // apply change to array
+            if (point1.X == point2.X) // top or bottom
+            {
+                if (point2.Y < point1.Y) // top
+                {
+                    array[i1, j1].dir[3] = 1;
+                    array[i2, j2].dir[1] = 1;
+                }
+                else // bottom
+                {
+                    array[i1, j1].dir[1] = 1;
+                    array[i2, j2].dir[3] = 1;
+                }
+            }
+            else // left or right
+            {
+                if (point2.X > point1.X) // right
+                {
+                    array[i1, j1].dir[0] = 1;
+                    array[i2, j2].dir[2] = 1;
+                }
+                else // left
+                {
+                    array[i1, j1].dir[2] = 1;
+                    array[i2, j2].dir[0] = 1;
+                }
+            }
+
+            bool scored = false;
+
+            // draw line
+            switch (turn)
+            {
+                case 0:
+                    g.FillPie(squareRedColor, point1.X, point1.Y, sizeofdot, sizeofdot, 0, 360);
+                    g.FillPie(squareRedColor, point2.X, point2.Y, sizeofdot, sizeofdot, 0, 360);
+
+                    Pen red = new Pen(lineRedColor.Color, 8);
+                    red.Alignment = System.Drawing.Drawing2D.PenAlignment.Center;
+
+                    g.DrawLine(
+                        red,
+                        new PointF(point1.X + (sizeofdot / 2), point1.Y + (sizeofdot / 2)),
+                        new PointF(point2.X + (sizeofdot / 2), point2.Y + (sizeofdot / 2))
+                        );
+
+                    Log("Red (" + (i1 + 1) + ", " + (j1 + 1) + ") To (" + (i2 + 1) + ", " + (j2 + 1) + ")");
+
+                    scored = FillSquare(squareRedColor, check, point1, point2);
+
+                    if (!scored)
+                    {
+                        Log("Blue turn...");
+                        turnStatus.ForeColor = lineBlueColor.Color;
+                    }
+                    else
+                    {
+                        turnStatus.ForeColor = lineRedColor.Color;
+                        Log("Got a reward.\nRed turn");
+                    }
+
+                    break;
+
+                case 1:
+                    g.FillPie(squareBlueColor, point1.X, point1.Y, sizeofdot, sizeofdot, 0, 360);
+                    g.FillPie(squareBlueColor, point2.X, point2.Y, sizeofdot, sizeofdot, 0, 360);
+
+                    Pen blue = new Pen(lineBlueColor.Color, 8);
+                    blue.Alignment = System.Drawing.Drawing2D.PenAlignment.Center;
+
+                    g.DrawLine(
+                        blue,
+                        new PointF(point1.X + (sizeofdot / 2), point1.Y + (sizeofdot / 2)),
+                        new PointF(point2.X + (sizeofdot / 2), point2.Y + (sizeofdot / 2))
+                        );
+
+                    Log("Blue (" + (i1 + 1) + ", " + (j1 + 1) + ") To (" + (i2 + 1) + ", " + (j2 + 1) + ")");
+
+                    scored = FillSquare(squareBlueColor, check, point1, point2);
+
+                    if (!scored)
+                    {
+                        Log("Red turn...");
+                        turnStatus.ForeColor = lineRedColor.Color;
+                    }
+                    else
+                    {
+                        turnStatus.ForeColor = lineBlueColor.Color;
+                        Log("Got a reward.\nBlue turn...");
+                    }
+
+                    break;
+            }
+
+            UpdateScores();
+
+            if (!scored)
+            {
+                turn++;
+                turn = turn % 2;
+            }
+
+            lines.Add(new Line(point1, point2));
+
+            return true;
+        }
+
+      
+        bool IsGameFinished()
+        {
+            if (maxLine > lines.Count)
+                return false;
+            return true;
+        }
+
+        int distanceFromPoint = 5;
+        PointF FindPoint(PointF p1)
+        {
+            foreach (var p in points)
+            {
+                double d = Math.Sqrt(Math.Pow(p1.X - p.X, 2) + Math.Pow(p1.Y - p.Y, 2));
+                if (d <= distanceFromPoint + distanceFromPoint)
+                    return p;
+            }
+            return new PointF(-1, -1);
+        }
+
+        // [0] = BottomRight
+        // [1] = TopRight
+        // [2] = TopLeft
+        // [3] = BottomLeft
+        int[] CheckState(PointF Cp1, PointF Cp2)
+        {
+            int[] res = new int[4];
+            res[0] = res[1] = res[2] = res[3] = 0;
+
+            float x = distanceBetweenDotX;
+            float y = distanceBetweenDotY;
+
+            if (Cp1.X == Cp2.X)
+            {
+                if (Cp1.Y > Cp2.Y)
+                {
+                    if (IsDrawedLine(Cp1, new PointF(Cp1.X + x, Cp1.Y)) &&
+                        IsDrawedLine(new PointF(Cp1.X + x, Cp1.Y), new PointF(Cp1.X + x, Cp1.Y - y)) &&
+                        IsDrawedLine(new PointF(Cp1.X + x, Cp1.Y - y), new PointF(Cp1.X, Cp1.Y - y)) &&
+                        !IsDrawedLine(Cp1, Cp2)
+                        )
+                        res[3] = 1;
+
+                    if (IsDrawedLine(Cp1, new PointF(Cp1.X - x, Cp1.Y)) &&
+                        IsDrawedLine(new PointF(Cp1.X - x, Cp1.Y), new PointF(Cp1.X - x, Cp1.Y - y)) &&
+                        IsDrawedLine(new PointF(Cp1.X - x, Cp1.Y - y), new PointF(Cp1.X, Cp1.Y - y)) &&
+                        !IsDrawedLine(Cp1, Cp2)
+                        )
+                        res[2] = 1;
+                }
+                else
+                {
+                    if (IsDrawedLine(Cp1, new PointF(Cp1.X - x, Cp1.Y)) &&
+                        IsDrawedLine(new PointF(Cp1.X - x, Cp1.Y), new PointF(Cp1.X - x, Cp1.Y + y)) &&
+                        IsDrawedLine(new PointF(Cp1.X - x, Cp1.Y + y), new PointF(Cp1.X, Cp1.Y + y)) &&
+                        !IsDrawedLine(Cp1, Cp2)
+                        )
+                        res[1] = 1;
+
+                    if (IsDrawedLine(Cp1, new PointF(Cp1.X + x, Cp1.Y)) &&
+                        IsDrawedLine(new PointF(Cp1.X + x, Cp1.Y), new PointF(Cp1.X + x, Cp1.Y + y)) &&
+                        IsDrawedLine(new PointF(Cp1.X + x, Cp1.Y + y), new PointF(Cp1.X, Cp1.Y + y)) &&
+                        !IsDrawedLine(Cp1, Cp2)
+                        )
+                        res[0] = 1;
+                }
+            }
+            else if (Cp1.Y == Cp2.Y)
+            {
+                if (Cp1.X > Cp2.X)
+                {
+                    if (IsDrawedLine(Cp1, new PointF(Cp1.X, Cp1.Y - y)) &&
+                        IsDrawedLine(new PointF(Cp1.X, Cp1.Y - y), new PointF(Cp1.X - x, Cp1.Y - y)) &&
+                        IsDrawedLine(new PointF(Cp1.X - x, Cp1.Y - y), new PointF(Cp1.X - x, Cp1.Y)) &&
+                        !IsDrawedLine(Cp1, Cp2)
+                       )
+                        res[2] = 1;
+
+                    if (IsDrawedLine(Cp1, new PointF(Cp1.X, Cp1.Y + y)) &&
+                        IsDrawedLine(new PointF(Cp1.X, Cp1.Y + y), new PointF(Cp1.X - x, Cp1.Y + y)) &&
+                        IsDrawedLine(new PointF(Cp1.X - x, Cp1.Y + y), new PointF(Cp1.X - x, Cp1.Y)) &&
+                        !IsDrawedLine(Cp1, Cp2)
+                        )
+                        res[1] = 1;
+                }
+                else
+                {
+                    if (IsDrawedLine(Cp1, new PointF(Cp1.X, Cp1.Y - y)) &&
+                        IsDrawedLine(new PointF(Cp1.X, Cp1.Y - y), new PointF(Cp1.X + x, Cp1.Y - y)) &&
+                        IsDrawedLineuuuudnhhnh(new PointF(Cp1.X + x, Cp1.Y - y), new PointF(Cp1.X + x, Cp1.Y)) &&
+                        !IsDrawedLine(Cp1, Cp2)
+                        )
+                        res[3] = 1;
+
+                    if (IsDrawedLine(Cp1, new PointF(Cp1.X, Cp1.Y + y)) &&
+                        IsDrawedLine(new PointF(Cp1.X, Cp1.Y + y), new PointF(Cp1.X + x, Cp1.Y + y)) &&
+                        IsDrawedLine(new PointF(Cp1.X + x, Cp1.Y + y), new PointF(Cp1.X + x, Cp1.Y)) &&
+                        !IsDrawedLine(Cp1, Cp2)
+                        )
+                        res[0] = 1;
+                }
+            }
+
+            return res;
+        }
+
+        
+        void ComUsingRand(int turnNumber)
+        {
+            a:
+            Delay(delayTime);
+            if (turn != turnNumber || IsGameFinished())
+            {
+                return;
+            }
+
+            PointF Cp1 = new PointF(-1, -1), Cp2 = new PointF(-1, -1);
+            Random r = new Random();
+
+            int i1 = r.Next() % n;
+            int j1 = r.Next() % m;
+
+            int i2 = r.Next() % n;
+            int j2 = r.Next() % m;
+
+            while (!IsTrueLine(Cp1, Cp2))
+            {
+                i1 = r.Next() % n;
+                j1 = r.Next() % m;
+
+                i2 = r.Next() % n;
+                j2 = r.Next() % m;
+
+                Cp1 = new PointF(
+                    (i1 * distanceBetweenDotX) + offset,
+                    (j1 * distanceBetweenDotY) + offset
+                    );
+
+                Cp2 = new PointF(
+                    (i2 * distanceBetweenDotX) + offset,
+                    (j2 * distanceBetweenDotY) + offset
+                    );
+            }
+
+            if (!MakeLine(Cp1, Cp2))
+            {
+                Log("Rand couldn't move!");
+                button2_Click(this, null);
+                return;
+            }
+            goto a;
+        }
+//=======================================================================================================================================
+       
+        void ComUsingAi1(int turnNumber)
+        {
+            a:
+            Delay(delayTime);
+            if (turn != turnNumber || IsGameFinished())
+            {
+                return;
+            }
+
+            PointF p1 = new PointF(-1, -1), p2 = new PointF(-1, -1);
+            int max = int.MinValue;
+            int dep = 3;
+            foreach (var item in points)
+            {
+                Line line1 = null;
+                Line line2 = null;
+                Line line3 = null;
+                Line line4 = null;
+                line1 = new Line(item, new PointF(item.X + distanceBetweenDotX, item.Y));
+                line2 = new Line(item, new PointF(item.X, item.Y + distanceBetweenDotY));
+                line3 = new Line(item, new PointF(item.X - distanceBetweenDotX, item.Y));
+                line4 = new Line(item, new PointF(item.X, item.Y - distanceBetweenDotY));
+
+                PointF[,] maping;
+                List<Line> lines;
+                lines = CopyLines(this.lines);
+
+                if (IsTrueLine(line1.p1, line1.p2))
+                {
+                    lines = CopyLines(this.lines);
+                    int v = valum(CheckState(line1.p1, line2.p2), true);
+                    maping = Maping(array);
+                    lines.Add(line1);
+                    if (max < score)
+                    {
+                        max = score;
+                        p1 = line1.p1;
+                        p2 = line1.p2;
+                    }
+                }
+
+                if (IsTrueLine(line2.p1, line2.p2))
+                {
+                    lines = CopyLines(this.lines);
+                    int v = valum(CheckState(line2.p1, line2.p2), true);
+                    maping = Maping(array);
+                    lines.Add(line2);
+                    int score = MinmumMaximum(maping, lines, dep, v != 0) + v;
+                    if (max < score)
+                    {
+                        max = score;
+                        p1 = line2.p1;
+                        p2 = line2.p2;
+                    }
+                }
+
+                if (IsTrueLine(line3.p1, line3.p2))
+                {
+                    lines = CopyLines(this.lines);
+                    int v = valum(CheckState(line3.p1, line3.p2), true);
+                    maping = Maping(array);
+                    lines.Add(line3);
+                    int score = MinmumMaximum(maping, lines, dep, v != 0) + v;
+                    if (max < score)
+                    {
+                        max = score;
+                        p1 = line3.p1;
+                        p2 = line3.p2;
+                    }
+                }
+
+                if (IsTrueLine(line4.p1, line4.p2))
+                {
+                    lines = CopyLines(this.lines);
+                    int v = valum(CheckState(line4.p1, line4.p2), true);
+                    maping = Maping(array);
+                    lines.Add(line4);
+                    int score = MinmumMaximum(maping, lines, dep, v != 0) + v;
+                    if (max < score)
+                    {
+                        max = score;
+                        p1 = line4.p1;
+                        p2 = line4.p2;
+                    }
+                }
+            }
+
+            if (!MakeLine(p1, p2))
+            {
+                Log("Ai1 couldn't move!");
+                button2_Click(this, null);
+                return;
+            }
+            goto a;
+        }
+
+        private List<Line> CopyLines(List<Line> lines)
+        {
+            List<Line> li = new List<Line>();
+            foreach (var l in lines)
+            {
+                li.Add(new Line(l.p1, l.p2));
+            }
+            return li;
+        }
+
+        int valum(int[] check, bool maxPlayer)
+        {
+            int sum = 0;
+            foreach (int item in check)
+                if (item == 1)
+                    sum++;
+
+            if (!maxPlayer)
+                sum = sum * -1;
+
+            return sum;
+        }
+
+        PointF[,] Maping(Pointt[,] array)
+        {
+            PointF[,] map = new PointF[n, m];
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < m; j++)
+                {
+                    map[i, j] = new PointF(array[i, j].x, array[i, j].y);
+                }
+            }
+            return map;
+        }
+
+
+        int MinmumMaximum(PointF[,] arrayPoint, List<Line> lines, int dep, bool maxPlayer)
+        {
+            if (dep == 0)
+                return 0;
+
+            int value;
+            if (maxPlayer)
+            {
+                value = int.MinValue;
+                for (int i = 0; i < n; i++)
+                {
+                    for (int j = 0; j < m; j++)
+                    {
+                        Line line1 = null;
+                        Line line2 = null;
+                        Line line3 = null;
+                        Line line4 = null;
+
+                        if (i + 1 < n)
+                            line1 = new Line(arrayPoint[i, j], arrayPoint[i + 1, j]);
+                        if (j + 1 < m)
+                            line2 = new Line(arrayPoint[i, j], arrayPoint[i, j + 1]);
+                        if (i - 1 >= 0)
+                            line3 = new Line(arrayPoint[i, j], arrayPoint[i - 1, j]);
+                        if (j - 1 >= 0)
+                            line4 = new Line(arrayPoint[i, j], arrayPoint[i, j - 1]);
+
+                        PointF[,] maping;
+                        List<Line> lin;
+                        lin = CopyLines(lines);
+                        if (line1 != null)
+                            if (IsTrueLine(line1.p1, line1.p2))
+                        {
+                            lin = CopyLines(lines);
+                            int v = valum(CheckState(line1.p1, line1.p2), maxPlayer);
+                            maping = Maping(array);
+                            lin.Add(line1);
+                            value = Math.Max(value, v + MinmumMaximum(maping, lin, dep - 1, v != 0));
+                        }
+                        if (line2 != null)
+                            if (IsTrueLine(line2.p1, line2.p2))
+                        {
+                            lin = CopyLines(lines);
+                            int v = valum(CheckState(line2.p1, line2.p2), maxPlayer);
+                            maping = Maping(array);
+                            lin.Add(line2);
+                            value = Math.Max(value, v + MinmumMaximum(maping, lin, dep - 1, v != 0));
+                        }
+                        if (line3 != null)
+                            if (IsTrueLine(line3.p1, line3.p2))
+                        {
+                            lin = CopyLines(lines);
+                            int v = valum(CheckState(line3.p1, line3.p2), maxPlayer);
+                            maping = Maping(array);
+                            lin.Add(line3);
+                            value = Math.Max(value, v + MinmumMaximum(maping, lin, dep - 1, v != 0));
+                        }
+                        if (line4 != null)
+                            if (IsTrueLine(line4.p1, line4.p2))
+                        {
+                            lin = CopyLines(lines);
+                            int v = valum(CheckState(line4.p1, line4.p2), maxPlayer);
+                            maping = Maping(array);
+                            lin.Add(line4);
+                            value = Math.Max(value, v + MinmumMaximum(maping, lin, dep - 1, v != 0));
+                        }
+
+                    }
+                }
+            }
+            else
+            {
+                value = int.MaxValue;
+                for (int i = 0; i < n; i++)
+                {
+                    for (int j = 0; j < m; j++)
+                    {
+                        Line line1 = null;
+                        Line line2 = null;
+                        Line line3 = null;
+                        Line line4 = null;
+
+                        if (i + 1 < n)
+                            line1 = new Line(arrayPoint[i, j], arrayPoint[i + 1, j]);
+                        if (j + 1 < m)
+                            line2 = new Line(arrayPoint[i, j], arrayPoint[i, j + 1]);
+                        if (i - 1 >= 0)
+                            line3 = new Line(arrayPoint[i, j], arrayPoint[i - 1, j]);
+                        if (j - 1 >= 0)
+                            line4 = new Line(arrayPoint[i, j], arrayPoint[i, j - 1]);
+
+                        PointF[,] maping;
+                        List<Line> lin;
+                        lin = CopyLines(lines);
+
+                        if (line1 != null)
+                            if (IsTrueLine(line1.p1, line1.p2))
+                            {
+                                int val = valum(CheckState(line1.p1, line1.p2), maxPlayer);
+                                maping = Maping(array);
+                                lin.Add(line1);
+                                value = Math.Min(value, val + MinmumMaximum(maping, lin, dep - 1, val == 0));
+                            }
+                        if (line2 != null)
+                            if (IsTrueLine(line2.p1, line2.p2))
+                            {
+                                lin = CopyLines(lines);
+                                int val = valum(CheckState(line2.p1, line2.p2), maxPlayer);
+                                maping = Maping(array);
+                                lin.Add(line2);
+                                value = Math.Min(value, val + MinmumMaximum(maping, lin, dep - 1, val == 0));
+                            }
+
+                        if (line3 != null)
+
+                            if (IsTrueLine(line3.p1, line3.p2))
+                            {
+                                lin = CopyLines(lines);
+                                int val = valum(CheckState(line3.p1, line3.p2), maxPlayer);
+                                maping = Maping(array);
+                                lin.Add(line3);
+                                value = Math.Min(value, val + MinmumMaximum(maping, lin, dep - 1, val == 0));
+                            }
+                        if (line4 != null)
+                            if (IsTrueLine(line4.p1, line4.p2))
+                            {
+                                lin = CopyLines(lines);
+                                int val = valum(CheckState(line4.p1, line4.p2), maxPlayer);
+                                maping = Maping(array);
+                                lin.Add(line4);
+                                value = Math.Min(value, val + MinmumMaximum(maping, lin, dep - 1, val == 0));
+                            }
+                    }
+                }
+            }
+            return value;
+        }
+//=======================================================================================================================================
+       
+        void ComUsingAi2(int turnNumber)
+        {
+            a:
+            Delay(delayTime);
+            if (turn != turnNumber || IsGameFinished())
+            {
+                return;
+            }
+
+            PointF p1 = new PointF(-1, -1), p2 = new PointF(-1, -1);
+            foreach (var item in lines)
+            {
+
+            }
+
+            if (!MakeLine(p1, p1))
+            {
+                Log("Ai2 couldn't move!");
+                button2_Click(this, null);
+                return;
+            }
+            goto a;
+        }
+
+        void Ai2_Against_Ai1(object sender, DoWorkEventArgs e)
+        {
+            while (!IsGameFinished())
+            {
+                if (IsGameFinished())
+                    break;
+
+                //ComUsingAi2(0); //0
+                ComUsingRand(0);
+
+                if (IsGameFinished())
+                    break;
+
+                //ComUsingAi1(1); //1
+                ComUsingRand(1);
+
+                if (m_oWorker.CancellationPending)
+                {
+                    e.Cancel = true;
+                    m_oWorker.ReportProgress(0);
+                    return;
+                }
+            }
+            button2_Click(this, null);
+        }
+
+        void Player_Against_ComAi1(PointF point)
+        {
+            Player(point);
+            ComUsingAi1(1);
+        }
+
+        void Player_Against_Random(PointF point)
+        {
+            Player(point);
+            ComUsingRand(1);
+        }
+
+
+
+        
+
+        BackgroundWorker m_oWorker;
+        private void Stop(object sender, EventArgs e)
+        {
+            if (m_oWorker.IsBusy)
+            {
+                m_oWorker.CancelAsync();
+            }
+        }
+
+        // player clicked point
+        PointF point1, point2;
+        int indexUpdatePoint = 0;
+        void Player(PointF point)
+        {
+            if (turn != 0 || IsGameFinished())
+                return;
+
+            if (!IsTruePoint(point))
+                return;
+
+
+            switch (indexUpdatePoint)
+            {
+                case 0:
+                    point1.X = point.X;
+                    point1.Y = point.Y;
+
+                    Log("click on next point...");
+
+                    indexUpdatePoint = 1;
+                    break;
+
+                case 1:
+                    point2.X = point.X;
+                    point2.Y = point.Y;
+
+                    int i1, i2, j1, j2;
+
+                    i1 = Convert.ToInt32((point1.X - offset) / distanceBetweenDotX);
+                    j1 = Convert.ToInt32((point1.Y - offset) / distanceBetweenDotX);
+                    i2 = Convert.ToInt32((point2.X - offset) / distanceBetweenDotX);
+                    j2 = Convert.ToInt32((point2.Y - offset) / distanceBetweenDotX);
+
+                    if (!MakeLine(point1, point2))
+                    {
+                        Log("Wrong points, try again!");
+                    }
+
+                    indexUpdatePoint = 0;
+                    break;
+
+                default:
+                    Log("Something's wrong with indexUpdatePoint: " + indexUpdatePoint);
+                    indexUpdatePoint = 0;
+                    break;
+            }
+
+        }
+
+        private void Form1_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (IsGameFinished())
+            {
+                button2_Click(this, null);
+            }
+            else if (gameMode == 2)
+            {
+                PointF point = FindPoint(new PointF(e.X, e.Y));
+                Player_Against_ComAi1(point);
+            }
+            else if (gameMode == 3)
+            {
+                PointF point = FindPoint(new PointF(e.X, e.Y));
+                Player_Against_Random(point);
+            }
+        }
+
+        bool FillSquare(Brush brush, int[] check, PointF point1, PointF point2)
+        {
+            bool scored = false;
+            if (check[0] == 1)
+            {
+                scores[turn]++;
+                scored = true;
+                Log("BR");
+                g.FillRectangle(brush, point1.X + (sizeofdot / 2), point1.Y + (sizeofdot / 2), distanceBetweenDotX, distanceBetweenDotY);
+            }
+            if (check[1] == 1)
+            {
+                scores[turn]++;
+                scored = true;
+                Log("TR");
+                g.FillRectangle(brush, point1.X + (sizeofdot / 2) - distanceBetweenDotX, point1.Y + (sizeofdot / 2), distanceBetweenDotX, distanceBetweenDotY);
+            }
+            if (check[2] == 1)
+            {
+                scores[turn]++;
+                scored = true;
+                Log("TL");
+                g.FillRectangle(brush, point1.X + (sizeofdot / 2) - distanceBetweenDotX, point1.Y + (sizeofdot / 2) - distanceBetweenDotY, distanceBetweenDotX, distanceBetweenDotY);
+            }
+            if (check[3] == 1)
+            {
+                scores[turn]++;
+                scored = true;
+                Log("BL");
+                g.FillRectangle(brush, point1.X + (sizeofdot / 2), point1.Y + (sizeofdot / 2) - distanceBetweenDotY, distanceBetweenDotX, distanceBetweenDotY);
+            }
+            return scored;
+        }
+
+        private void textBox1_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            Application.Exit();
+        }
+
+        void UpdateScores()
+        {
+            if (textBox1.InvokeRequired)
+            {
+                textBox1.Invoke(new MethodInvoker(delegate
+                {
+                    scorePlayer.Text = scores[0].ToString();
+                    scoreCom.Text = scores[1].ToString();
+                }));
+            }
+            else
+            {
+                scorePlayer.Text = scores[0].ToString();
+                scoreCom.Text = scores[1].ToString();
+            }
+        }
+
+        void Init()
+        {
+            textBox1.Clear();
+            array = new Pointt[n, m];
+            maxLine = ((n - 1) * m) + ((m - 1) * n);
+            lines = new List<Line>();
+            point1 = new PointF(-1, -1);
+            point2 = new PointF(-1, -1);
+            distanceBetweenDotY = (Height - (offset * 1)) / (float)n;
+            distanceBetweenDotX = (Width - (offset * 1) - groupBox1.Width) / (float)m;
+
+            scores[0] = scores[1] = 0;
+            UpdateScores();
+
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < m; j++)
+                {
+                    g.FillPie(pointColor, (i * distanceBetweenDotX) + offset, (j * distanceBetweenDotY) + offset, sizeofdot, sizeofdot, 0, 360);
+                    points.Add(new PointF((i * distanceBetweenDotX) + offset, (j * distanceBetweenDotY) + offset));
+                    Pointt t = new Pointt((i * distanceBetweenDotX) + offset, (j * distanceBetweenDotY) + offset);
+
+                    // top
+                    if (i == 0)
+                    {
+                        t.dir[3] = 1;
+                    }
+                    // left
+                    if (j == 0)
+                    {
+                        t.dir[2] = 1;
+                    }
+                    // bottom
+                    if (i == n - 1)
+                    {
+                        t.dir[1] = 1;
+                    }
+                    // right
+                    if (j == m - 1)
+                    {
+                        t.dir[0] = 1;
+                    }
+                    array[i, j] = t;
+                }
+            }
+        }
+
+        void Delay(int milliSecondsDelay)
+        {
+            var t = Task.Run(async delegate
+            {
+                await Task.Delay(milliSecondsDelay);
+                return 42;
+            });
+            t.Wait();
+        }
+
+        private void gameSpeed_Click(object sender, EventArgs e)
+        {
+            Point CP = gameSpeed.PointToClient(Cursor.Position);
+            gameSpeed.Value = gameSpeed.Minimum + (gameSpeed.Maximum - gameSpeed.Minimum) * CP.X / gameSpeed.Width;
+            delayTime = gameSpeed.Value;
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            if (button2.Text == "Start")
+            {
+                delayTime = 800;
+                g.Clear(Color.DarkGray);
+                button2.Text = "Stop";
+                if (rbAi2AndAi1.Checked)
+                {
+                    Init();
+                    gameMode = 1;
+                    delayTime = 200;
+                    rbPlayerAndRandom.Enabled = false;
+                    rbPlayerAndAi1.Enabled = false;
+                    rbAi2AndAi1.Enabled = false;
+                    m_oWorker.RunWorkerAsync();
+                }
+                else if (rbPlayerAndAi1.Checked)
+                {
+                    Init();
+                    gameMode = 2;
+                    rbPlayerAndRandom.Enabled = false;
+                    rbAi2AndAi1.Enabled = false;
+                    rbPlayerAndAi1.Enabled = false;
+                }
+                else if (rbPlayerAndRandom.Checked)
+                {
+                    Init();
+                    gameMode = 3;
+                    rbAi2AndAi1.Enabled = false;
+                    rbPlayerAndAi1.Enabled = false;
+                    rbPlayerAndRandom.Enabled = false;
+                }
+                else
+                {
+                    gameMode = -1;
+                    MessageBox.Show("Please select a method...");
+                }
+            }
+            else
+            {
+                Stop(this, null);
+                if (lines.Count >= maxLine)
+                {
+                    string s = "";
+                    if (scores[0] > scores[1])
+                        s = "Red wins!";
+                    else if (scores[1] > scores[0])
+                        s = "Blue wins!";
+                    else
+                        s = "Equals";
+
+                    Log(s);
+                    MessageBox.Show(s);
+                }
+                else
+                {
+                    MessageBox.Show("Game Stopped!");
+                }
+
+                gameMode = -1;
+                if (rbAi2AndAi1.InvokeRequired)
+                {
+                    rbAi2AndAi1.Invoke(new MethodInvoker(delegate
+                    {
+                        rbAi2AndAi1.Enabled = true;
+                    }));
+                }
+                else
+                {
+                    rbAi2AndAi1.Enabled = true;
+                }
+
+                if (rbPlayerAndAi1.InvokeRequired)
+                {
+                    rbPlayerAndAi1.Invoke(new MethodInvoker(delegate
+                    {
+                        rbPlayerAndAi1.Enabled = true;
+                    }));
+                }
+                else
+                {
+                    rbPlayerAndAi1.Enabled = true;
+                }
+
+                if (rbPlayerAndRandom.InvokeRequired)
+                {
+                    rbPlayerAndRandom.Invoke(new MethodInvoker(delegate
+                    {
+                        rbPlayerAndRandom.Enabled = true;
+                    }));
+                }
+                else
+                {
+                    rbPlayerAndRandom.Enabled = true;
+                }
+
+                if (button2.InvokeRequired)
+                {
+                    button2.Invoke(new MethodInvoker(delegate
+                    {
+                        button2.Text = "Start";
+                    }));
+                }
+                else
+                {
+                    button2.Text = "Start";
+                }
+            }
+        }
+    }
+}
